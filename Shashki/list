@@ -1,0 +1,838 @@
+#pragma once
+
+#include <vector>
+using namespace std ;
+
+// Перечисление типов ячеек
+enum CELL { cHuman1,cHuman2,cHuman1D,cHuman2D,cEmpty } ;
+
+// Перечисление типов ходов
+enum STEP { sHuman1,sHuman2 } ;
+
+// Основной класс игры
+class Game
+{
+private:
+	// Ячейки
+	CELL ** cells ; 
+public:
+	Game(void);
+	// Размер поля
+	static int Size() ;
+	// Корректно ли поле (разрешены черные клетки)
+	static bool isValidCell(int x, int y) ;
+	// Корректен ли ход
+	bool isValidStep(int xs, int ys, int xf, int yf, STEP step, char * msg) ;
+	// Получить ячейку
+	CELL getCell(int x, int y) ;
+	// Является ли клетка игрока
+	bool isCellHuman(int x,int y, STEP human) ;
+	// Является ли клетка противника
+	bool isCellEnemy(int x,int y, STEP human) ;	
+	// Число фигур игрока
+	int countHuman(STEP human) ;
+	// Передвинуть фигуру
+	bool moveObject(int xs, int ys, int xf, int yf, STEP step, bool * isgrabbed) ;
+	bool isStepGrab(int xs, int ys, int xf, int yf, STEP step) ;
+	bool canAttackFrom(int xs, int ys, STEP step) ;
+	// Проверка победы
+	bool testWin(bool * win, STEP step) ;
+	bool canStep(STEP step) ;
+	bool isCellHumanCommon(int x,int y, STEP step) ;
+	bool isCellHumanDamka(int x,int y, STEP step) ;
+	~Game(void);    
+};
+
+#pragma once
+
+#include "Game.h"
+
+// Результат клика по доске
+enum CLICKRESULT { crOk, crMsg, crFinish } ;
+
+// Класс рисования
+class GamePainter
+{
+private:
+	//Ссылка на игру
+	Game * game ;
+	// Размеры доски и ячейки
+	int _w ;
+	int _h ;
+	int dw ;
+	int dh ;
+	int border ;
+	bool rotated ;
+	// Выбранная клетка
+	POINT Selected ;
+	// Очистка выбранной
+	void ClearSelected() ;
+	// Проверка выбранной
+	bool isSelected() ;
+public:
+	GamePainter(void);
+	// Установить игру для рисования
+	void setGame(Game * Agame) ;
+	// Вывести игру на контекст
+	void drawTo(HDC hdc,int w, int h) ;	
+	// Поворот
+	void setRotated(bool rotated) ;
+	// Щелчок по доске
+	CLICKRESULT doClick(int cx,int cy, STEP step, char * msg) ;
+	~GamePainter(void);
+};
+
+//{{NO_DEPENDENCIES}}
+// Microsoft Visual C++ generated include file.
+// Used by Shashki.rc
+//
+
+#define IDS_APP_TITLE			103
+
+#define ID_TIMER 1234
+
+#define IDR_MAINFRAME			128
+#define IDD_SHASHKI_DIALOG	102
+#define IDD_ABOUTBOX			103
+#define IDM_ABOUT				104
+#define IDM_EXIT				105
+#define IDM_START				106
+#define IDI_SHASHKI			107
+#define IDI_SMALL				108
+#define IDC_SHASHKI			109
+#define IDC_MYICON				2
+#ifndef IDC_STATIC
+#define IDC_STATIC				-1
+#endif
+// Следующие стандартные значения для новых объектов
+//
+#ifdef APSTUDIO_INVOKED
+#ifndef APSTUDIO_READONLY_SYMBOLS
+
+#define _APS_NO_MFC					130
+#define _APS_NEXT_RESOURCE_VALUE	129
+#define _APS_NEXT_COMMAND_VALUE		32771
+#define _APS_NEXT_CONTROL_VALUE		1000
+#define _APS_NEXT_SYMED_VALUE		110
+#endif
+#endif
+#pragma once
+
+#include "resource.h"
+// stdafx.h: включаемый файл для стандартных системных включаемых файлов
+// или включаемых файлов для конкретного проекта, которые часто используются, но
+// не часто изменяются
+//
+
+#pragma once
+
+#include "targetver.h"
+
+#define WIN32_LEAN_AND_MEAN             // Исключите редко используемые компоненты из заголовков Windows
+// Файлы заголовков Windows:
+#include <windows.h>
+
+// Файлы заголовков C RunTime
+#include <stdlib.h>
+#include <malloc.h>
+#include <memory.h>
+#include <tchar.h>
+
+
+// TODO: Установите здесь ссылки на дополнительные заголовки, требующиеся для программы
+#pragma once
+
+// Включение SDKDDKVer.h обеспечивает определение самой последней доступной платформы Windows.
+
+// Если требуется выполнить построение приложения для предыдущей версии Windows, включите WinSDKVer.h и
+// задайте для макроса _WIN32_WINNT значение поддерживаемой платформы перед включением SDKDDKVer.h.
+
+#include <SDKDDKVer.h>
+#include "stdafx.h"
+#include "Game.h"
+
+Game::Game(void)
+{
+	// Создание клеток
+	cells = new CELL*[Size()] ;
+	for (int x=0; x<Size(); x++) 
+		cells[x]= new CELL[Size()] ;
+	
+	// Стартовая очистка и расстановка
+	for (int x=0; x<Size(); x++) 
+		for (int y=0; y<Size(); y++) 
+			cells[x][y]=cEmpty ;
+	
+	for (int y=0; y<=2; y++)
+		for (int x=(y+1) % 2; x<Size(); x+=2)
+			cells[x][y]=cHuman2 ;
+		
+	for (int y=Size()-1; y>=Size()-3; y--)
+		for (int x=(y+1) % 2; x<Size(); x+=2)
+			cells[x][y]=cHuman1 ;
+	
+}
+
+bool Game::canAttackFrom(int xs, int ys, STEP step) {
+	
+	// шашка
+	if (isCellHumanCommon(xs,ys,step)) {
+		for (int dx=-2; dx<=2; dx+=4)
+			for (int dy=-2; dy<=2; dy+=4) {
+				int xf = xs+dx ;
+				int yf = ys+dy ;
+				if ((xf>=0)&&(xf<Size())&&(yf>=0)&&(yf<Size()))
+					if (isStepGrab(xs,ys,xf,yf,step)) return true ;
+			}
+		return false ;	
+	}
+	// дамка 
+	else {
+		for (int d=2; d<8; d++) {
+			int xf = xs+d ; int yf = ys+d ;
+			if ((xf>=0)&&(xf<Size())&&(yf>=0)&&(yf<Size()))
+					if (isStepGrab(xs,ys,xf,yf,step)) return true ;
+			xf = xs+d ; yf = ys-d ;
+			if ((xf>=0)&&(xf<Size())&&(yf>=0)&&(yf<Size()))
+					if (isStepGrab(xs,ys,xf,yf,step)) return true ;
+			xf = xs-d ; yf = ys+d ;
+			if ((xf>=0)&&(xf<Size())&&(yf>=0)&&(yf<Size()))
+					if (isStepGrab(xs,ys,xf,yf,step)) return true ;
+			xf = xs-d ; yf = ys-d ;
+			if ((xf>=0)&&(xf<Size())&&(yf>=0)&&(yf<Size()))
+					if (isStepGrab(xs,ys,xf,yf,step)) return true ;
+		}
+		return false ;
+	}
+	
+}
+
+bool Game::moveObject(int xs, int ys, int xf, int yf, STEP step, bool * isgrabbed) {
+	*isgrabbed = false ;
+	// Прыжок через клетку - взятие фигуры (универсальный код для дамки и шашки)
+	if (abs(xs-xf)>1) {
+		int dx = (xf>xs)?1:-1 ;
+		int dy = (yf>ys)?1:-1 ;
+
+		int yo = ys+dy ;
+		for (int xo=xs+dx; xo!=xf; xo+=dx) {
+			if (isCellEnemy(xo,yo,step)) {
+				cells[xo][yo]=cEmpty ;
+				*isgrabbed=true ;
+			}
+			yo+=dy ;
+		}
+	}
+
+	// Перемещение фигуры
+	cells[xf][yf]=cells[xs][ys] ;
+	cells[xs][ys]=cEmpty ;
+	
+	// Трансформация в дамку
+	if (step==sHuman1) {
+		if ((yf==0)&&(cells[xf][yf]==cHuman1)) 
+			cells[xf][yf]=cHuman1D ;
+	}
+	if (step==sHuman2) {
+		if ((yf==Size()-1)&&(cells[xf][yf]==cHuman2)) 
+			cells[xf][yf]=cHuman2D ;
+	}
+	
+	return true ;
+}
+
+int Game::Size() {
+	return 8 ;
+}
+
+bool Game::isValidCell(int x, int y) {
+	return (x+y) % 2 == 1 ;
+}
+
+bool Game::isValidStep(int xs, int ys, int xf, int yf, STEP step, char * msg) {
+	strcpy(msg,"") ;
+
+	// Некорректная клетка
+	if (!isValidCell(xf,yf)) return false ;
+	// Непустая клетка
+	if (getCell(xf,yf)!=cEmpty) return false ;
+	// Не шашка игрока
+	if (!isCellHuman(xs,ys,step)) return false ;
+	if ((xs==xf)||(ys==yf)) return false ;
+
+	// Проверка хода взятия
+	if (isStepGrab(xs,ys,xf,yf,step)) return true ;
+
+	// Проверка хода обычного
+	if (isCellHumanCommon(xs,ys,step)) {
+		int dy ;
+		// Выбираем направление хода по доске
+		if (step==sHuman1) dy=-1 ; 
+		if (step==cHuman2) dy=1 ; 
+
+		// Если клетка в сторону - ОК
+		if ((xf==xs+1)&&(yf==ys+dy)) return true ;
+		if ((xf==xs-1)&&(yf==ys+dy)) return true ;
+	}
+	// Проверка дамки
+	else {
+		if (abs(xs-xf)!=abs(ys-yf)) return false ;
+
+		int dx = (xf>xs)?1:-1 ;
+		int dy = (yf>ys)?1:-1 ;
+		int yo = ys+dy ;
+		for (int xo=xs+dx; xo!=xf; xo+=dx) {
+			if (getCell(xo,yo)!=cEmpty) return false ;
+			yo+=dy ;
+		}
+		return true ;
+	}
+			
+	return false ;
+}
+
+bool Game::isStepGrab(int xs, int ys, int xf, int yf, STEP step) {
+	
+	if (!isCellHuman(xs,ys,step)) return false ;
+	if (getCell(xf,yf)!=cEmpty) return false ;
+
+	if (isCellHumanCommon(xs,ys,step)) {
+		return (abs(xs-xf)==2)&&(abs(ys-yf)==2)&&isCellEnemy((xs+xf)/2,(ys+yf)/2,step) ;
+	}
+	else {
+		if (abs(xs-xf)!=abs(ys-yf)) return false ;
+
+		int dx = (xf>xs)?1:-1 ;
+		int dy = (yf>ys)?1:-1 ;
+		int yo = ys+dy ;
+		int cntenemy=0 ;
+		for (int xo=xs+dx; xo!=xf; xo+=dx) {
+			if (isCellHuman(xo,yo,step)) return false ;
+			if (isCellEnemy(xo,yo,step)) cntenemy++ ;
+			yo+=dy ;
+		}
+		return cntenemy>0 ;
+	}
+}
+
+int Game::countHuman(STEP human) {
+	int cnt=0 ;
+	for (int xs=0; xs<Size(); xs++)
+		for (int ys=0; ys<Size(); ys++) 
+			if (isCellHuman(xs,ys,human)) cnt++ ;
+	return cnt ;
+}
+
+bool Game::testWin(bool * win, STEP step) {	
+	// Если нет ходов, то проигрывает тот, чей сейчас ход
+	if (!canStep(sHuman1)) {		
+		*win=(step==sHuman2) ;
+		return true ;
+	}
+
+	if (!canStep(sHuman2)) {		
+		*win=(step==sHuman1) ;
+		return true ;
+	}
+		
+	// Закончились фигуры
+	if ((step==sHuman1)&&(countHuman(sHuman2)==0)) {
+		*win=true ;
+		return true ;
+	}
+
+	if ((step==sHuman2)&&(countHuman(sHuman1)==0)) {
+		*win=true ;
+		return true ;
+	}
+
+	return false ;
+}
+
+bool Game::isCellHuman(int x,int y, STEP step) {
+	if (step==cHuman1)
+		return (getCell(x,y)==cHuman1)||(getCell(x,y)==cHuman1D) ;
+	else
+		return (getCell(x,y)==cHuman2)||(getCell(x,y)==cHuman2D) ;
+}
+
+bool Game::isCellHumanCommon(int x,int y, STEP step) {
+	if (step==cHuman1)
+		return (getCell(x,y)==cHuman1) ;
+	else
+		return (getCell(x,y)==cHuman2) ;
+}
+
+bool Game::isCellHumanDamka(int x,int y, STEP step) {
+	if (step==cHuman1)
+		return (getCell(x,y)==cHuman1D) ;
+	else
+		return (getCell(x,y)==cHuman2D) ;
+}
+
+bool Game::isCellEnemy(int x,int y, STEP step) {
+	if (step==cHuman1)
+		return (getCell(x,y)==cHuman2)||(getCell(x,y)==cHuman2D) ;
+	else
+		return (getCell(x,y)==cHuman1)||(getCell(x,y)==cHuman1D) ;
+}
+
+bool Game::canStep(STEP step) {	
+	char msg[255] ;
+	// Перебираем все комбинации ходов, оставляя только корректные	
+	for (int xs=0; xs<Size(); xs++)
+		for (int ys=0; ys<Size(); ys++)
+			if (isCellHuman(xs,ys,step))
+				for (int xf=0; xf<Size(); xf++)
+					for (int yf=0; yf<Size(); yf++)
+						if (getCell(xf,yf)==cEmpty)
+							if (isValidStep(xs,ys,xf,yf,step,msg)) 
+								return true ;
+
+	return false ;	
+}
+
+CELL Game::getCell(int x, int y) {
+	return cells[x][y] ;
+}
+
+Game::~Game(void)
+{
+}
+#include "stdafx.h"
+#include "GamePainter.h"
+
+GamePainter::GamePainter(void)
+{
+	game = NULL ;
+	ClearSelected() ;
+	rotated = false ;
+}
+
+void GamePainter::ClearSelected() {
+	Selected.x=-1 ;
+	Selected.y=-1 ;
+}
+
+bool GamePainter::isSelected() {
+	return (Selected.x!=-1) ;
+}
+
+CLICKRESULT GamePainter::doClick(int cx,int cy, STEP step, char * msg) {
+	POINT clicked ;
+	bool find = false ;
+
+	for (int x=0; x<game->Size(); x++) 
+		for (int y=0; y<game->Size(); y++) 
+			if ((cx>border+x*dw)&&(cy>border+y*dh)&&(cx<border+(x+1)*dw)&&(cy<border+(y+1)*dh)) {
+				clicked.x = x ;
+				clicked.y = y ;
+				find = true ;
+			}
+
+	if (!find) return crOk ;
+
+	if (rotated) {
+		clicked.x=game->Size()-1-clicked.x ;
+		clicked.y=game->Size()-1-clicked.y ;
+	}
+
+	if (game->isCellHuman(clicked.x,clicked.y,step)) {
+		Selected = clicked ;
+		return crOk ;
+	}
+
+	if (isSelected()) {
+		char msg2[255] ;
+		if (game->isValidStep(Selected.x,Selected.y,clicked.x,clicked.y,step,msg2)) {
+			bool grabbed ;
+			game->moveObject(Selected.x,Selected.y,clicked.x,clicked.y,step,&grabbed) ;
+			if ((grabbed)&&(game->canAttackFrom(clicked.x,clicked.y,step))) {
+				Selected = clicked ;
+				return crOk ;
+			}
+			else {
+				ClearSelected() ;
+				return crFinish ;
+			}
+		}
+		else {
+			if (strlen(msg2)>0) {
+				strcpy(msg,msg2) ;
+				return crMsg ;
+			}
+			else
+				return crOk ;
+		}
+	}
+
+	return crOk ;
+}
+
+void GamePainter::drawTo(HDC hdc,int w, int h) {
+	_w = w ;
+	_h = h ;
+
+	border = 10 ;
+	dw = (w-border*3)/game->Size() ;
+	dh = (h-border*3-50)/game->Size() ;
+
+	COLORREF gray = RGB(80,80,80) ;
+	COLORREF black = RGB(0,0,0) ;
+	COLORREF white = RGB(255,255,255) ;
+	COLORREF white2 = RGB(200,200,200) ;
+	COLORREF black2 = RGB(60,60,60) ;
+	COLORREF green = RGB(100,255,100) ;
+
+	HBRUSH brushGray = CreateSolidBrush(gray) ;
+	HBRUSH brushBlack = CreateSolidBrush(black) ;
+	HBRUSH brushWhite = CreateSolidBrush(white) ;
+	HBRUSH brushBlack2 = CreateSolidBrush(black2) ;
+	HBRUSH brushWhite2 = CreateSolidBrush(white2) ;
+	HBRUSH brushGreen = CreateSolidBrush(green) ;
+	
+	HPEN pen = CreatePen(PS_SOLID, 1,gray) ;
+	HPEN penBlack2 = CreatePen(PS_SOLID, 1,black2) ;
+	HPEN penWhite2 = CreatePen(PS_SOLID, 1,white2) ;
+	
+	HBRUSH OldBrush = (HBRUSH)SelectObject(hdc, brushGray);
+	HPEN OldPen = (HPEN)SelectObject(hdc, pen);
+
+	for (int x=0; x<game->Size(); x++) 
+		for (int y=0; y<game->Size(); y++) {
+			int vx = x ; int vy = y ;
+			if (rotated) {
+				vx=game->Size()-1-x ;
+				vy=game->Size()-1-y ;
+			}
+
+			// Рисование клетки, если нужно - с фоном, но обязательно правильного цвета
+			if (game->isValidCell(x,y)) SelectObject(hdc, brushGray); else SelectObject(hdc,OldBrush) ;
+			if ((Selected.x==x)&&(Selected.y==y)) SelectObject(hdc,brushGreen) ;
+			Rectangle(hdc,border+vx*dw,border+vy*dh,border+(vx+1)*dw,border+(vy+1)*dh) ;
+			
+			if (game!=NULL) {
+				// Вывод фигур
+				if (game->getCell(x,y)==cHuman2) {
+					SelectObject(hdc,brushBlack) ;
+					Ellipse(hdc,border+vx*dw+3,border+vy*dh+3,border+(vx+1)*dw-3,border+(vy+1)*dh-3) ;
+				}
+				if (game->getCell(x,y)==cHuman1) {
+					SelectObject(hdc,brushWhite) ;
+					Ellipse(hdc,border+vx*dw+3,border+vy*dh+3,border+(vx+1)*dw-3,border+(vy+1)*dh-3) ;
+				}
+				if (game->getCell(x,y)==cHuman2D) {
+					SelectObject(hdc,brushBlack) ;
+					Ellipse(hdc,border+vx*dw+3,border+vy*dh+3,border+(vx+1)*dw-3,border+(vy+1)*dh-3) ;
+					SelectObject(hdc,brushBlack2) ;
+					SelectObject(hdc,penBlack2) ;
+					Ellipse(hdc,border+vx*dw+9,border+vy*dh+9,border+(vx+1)*dw-9,border+(vy+1)*dh-9) ;
+				}
+				if (game->getCell(x,y)==cHuman1D) {
+					SelectObject(hdc,brushWhite) ;
+					Ellipse(hdc,border+vx*dw+3,border+vy*dh+3,border+(vx+1)*dw-3,border+(vy+1)*dh-3) ;
+					SelectObject(hdc,brushWhite2) ;
+					SelectObject(hdc,penWhite2) ;
+					Ellipse(hdc,border+vx*dw+9,border+vy*dh+9,border+(vx+1)*dw-9,border+(vy+1)*dh-9) ;
+					SelectObject(hdc,pen) ;
+				}
+
+			}
+		}
+
+	SelectObject(hdc,OldBrush) ;
+	DeleteObject(brushGray) ;
+	DeleteObject(brushBlack) ;
+	DeleteObject(brushWhite) ;
+	DeleteObject(brushBlack2) ;
+	DeleteObject(brushWhite2) ;
+	SelectObject(hdc,OldPen) ;
+	DeleteObject(pen) ;
+	DeleteObject(penWhite2) ;
+	DeleteObject(penBlack2) ;
+
+}
+
+void GamePainter::setGame(Game * Agame) {
+	game = Agame ;
+}
+
+GamePainter::~GamePainter(void)
+{
+}
+
+void GamePainter::setRotated(bool rotated) {
+	this->rotated = rotated ;
+}// Shashki.cpp: определяет точку входа для приложения.
+//
+
+#include "stdafx.h"
+#include "Shashki.h"
+#include "GamePainter.h"
+#include "Game.h"
+
+#define MAX_LOADSTRING 100
+
+// Глобальные переменные:
+HINSTANCE hInst;								// текущий экземпляр
+TCHAR szTitle[MAX_LOADSTRING];					// Текст строки заголовка
+TCHAR szWindowClass[MAX_LOADSTRING];			// имя класса главного окна
+HWND hWnd;
+
+GamePainter * gp ; // Объект рисования
+Game * game ; // Объект игры
+STEP step ; // Текущий ход
+int w ;
+int h ;
+bool gameover ; // Метка конца игры
+
+// Отправить объявления функций, включенных в этот модуль кода:
+ATOM				MyRegisterClass(HINSTANCE hInstance);
+BOOL				InitInstance(HINSTANCE, int);
+LRESULT CALLBACK	WndProc(HWND, UINT, WPARAM, LPARAM);
+INT_PTR CALLBACK	About(HWND, UINT, WPARAM, LPARAM);
+
+int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
+                     _In_opt_ HINSTANCE hPrevInstance,
+                     _In_ LPTSTR    lpCmdLine,
+                     _In_ int       nCmdShow)
+{
+	UNREFERENCED_PARAMETER(hPrevInstance);
+	UNREFERENCED_PARAMETER(lpCmdLine);
+
+ 	// TODO: разместите код здесь.
+	MSG msg;
+	HACCEL hAccelTable;
+
+	// Инициализация глобальных строк
+	LoadString(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
+	LoadString(hInstance, IDC_SHASHKI, szWindowClass, MAX_LOADSTRING);
+	MyRegisterClass(hInstance);
+
+	// Выполнить инициализацию приложения:
+	if (!InitInstance (hInstance, nCmdShow))
+	{
+		return FALSE;
+	}
+
+	hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_SHASHKI));
+
+	// Цикл основного сообщения:
+	while (GetMessage(&msg, NULL, 0, 0))
+	{
+		if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg))
+		{
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
+	}
+
+	return (int) msg.wParam;
+}
+
+
+
+//
+//  ФУНКЦИЯ: MyRegisterClass()
+//
+//  НАЗНАЧЕНИЕ: регистрирует класс окна.
+//
+ATOM MyRegisterClass(HINSTANCE hInstance)
+{
+	WNDCLASSEX wcex;
+
+	wcex.cbSize = sizeof(WNDCLASSEX);
+
+	wcex.style			= CS_HREDRAW | CS_VREDRAW;
+	wcex.lpfnWndProc	= WndProc;
+	wcex.cbClsExtra		= 0;
+	wcex.cbWndExtra		= 0;
+	wcex.hInstance		= hInstance;
+	wcex.hIcon			= LoadIcon(hInstance, MAKEINTRESOURCE(IDI_SHASHKI));
+	wcex.hCursor		= LoadCursor(NULL, IDC_ARROW);
+	wcex.hbrBackground	= (HBRUSH)(COLOR_WINDOW+1);
+	wcex.lpszMenuName	= MAKEINTRESOURCE(IDC_SHASHKI);
+	wcex.lpszClassName	= szWindowClass;
+	wcex.hIconSm		= LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_SMALL));
+
+	return RegisterClassEx(&wcex);
+}
+
+// Обновление формы
+void refreshForm() {
+	InvalidateRect(hWnd,NULL,true) ;
+	UpdateWindow(hWnd) ;
+}
+
+// Обновление хода
+void updateStep() {
+	if (gameover) 
+		SetWindowTextW(hWnd,L"Гра закінчувати") ;
+	else {
+		if (step==sHuman1) SetWindowTextW(hWnd,L"Хід гравця 1") ;
+		else SetWindowTextW(hWnd,L"Хід гравця 2") ;		
+	}
+}
+
+// Новая игра
+void NewGame() {
+	// Создание объектов
+	gp = new GamePainter() ;
+	game = new Game() ;
+	gp->setGame(game) ;
+	// Первый ход игрока 1
+	step = sHuman1 ;
+	gameover = false ;
+	updateStep() ;
+}
+
+//
+//   ФУНКЦИЯ: InitInstance(HINSTANCE, int)
+//
+//   НАЗНАЧЕНИЕ: сохраняет обработку экземпляра и создает главное окно.
+//
+//   КОММЕНТАРИИ:
+//
+//        В данной функции дескриптор экземпляра сохраняется в глобальной переменной, а также
+//        создается и выводится на экран главное окно программы.
+//
+BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
+{
+   
+   hInst = hInstance; // Сохранить дескриптор экземпляра в глобальной переменной
+
+   hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
+      CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, NULL, NULL, hInstance, NULL);
+
+   if (!hWnd)
+   {
+      return FALSE;
+   }
+   
+      // Позиционирование окна по центру
+   int sw = GetSystemMetrics(SM_CXSCREEN); 
+   int sh = GetSystemMetrics(SM_CYSCREEN); 
+
+   // Центровка формы
+   w = 600 ;
+   h = 600 ;
+
+   MoveWindow(hWnd, (sw-w)/2,(sh-h)/2,w,h,true) ;
+   
+   ShowWindow(hWnd, nCmdShow);
+   UpdateWindow(hWnd);
+
+   updateStep() ;
+
+   return TRUE;
+}
+
+//
+//  ФУНКЦИЯ: WndProc(HWND, UINT, WPARAM, LPARAM)
+//
+//  НАЗНАЧЕНИЕ:  обрабатывает сообщения в главном окне.
+//
+//  WM_COMMAND	- обработка меню приложения
+//  WM_PAINT	-Закрасить главное окно
+//  WM_DESTROY	 - ввести сообщение о выходе и вернуться.
+//
+//
+LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+	int wmId, wmEvent;
+	PAINTSTRUCT ps;
+	HDC hdc;
+	char msg[255] ;
+	CLICKRESULT cr ;
+	bool win ;
+
+	switch (message)
+	{
+	case WM_COMMAND:
+		wmId    = LOWORD(wParam);
+		wmEvent = HIWORD(wParam);
+		// Разобрать выбор в меню:
+		switch (wmId)
+		{
+		case IDM_ABOUT:
+			DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
+			break;
+		case IDM_EXIT:
+			DestroyWindow(hWnd);
+			break;
+		case IDM_START:
+			NewGame() ;
+			refreshForm() ;
+			break ;
+		default:
+			return DefWindowProc(hWnd, message, wParam, lParam);
+		}
+		break;
+	case WM_PAINT:
+		// Рисование доски
+		hdc = BeginPaint(hWnd, &ps);
+		gp->drawTo(hdc,w,h) ;
+		EndPaint(hWnd, &ps);
+		break;
+	case WM_LBUTTONDOWN:
+		if (gameover) break ;
+		
+		// Отправка щелчка мыши
+		cr = gp->doClick(LOWORD(lParam),HIWORD(lParam),step,msg) ;
+		// Если получили сообщение, вывести
+		if (cr==crMsg) MessageBoxA(hWnd,msg,"OK",0) ;
+		// Если успешный ход
+		if (cr==crFinish) {			
+			// Проверка, не конец ли игре
+			if (game->testWin(&win,step)) {
+				gameover=true ;
+				if (win) MessageBoxA(hWnd,"Перемога!","OK",0) ; 
+				else MessageBoxA(hWnd,"Поразка!","OK",0) ; 
+			}			
+			else {
+				if (step==sHuman1) step=sHuman2 ; else step=sHuman1 ;
+				gp->setRotated(step==sHuman2) ;
+				updateStep() ;				
+			}
+		}
+		refreshForm() ;		
+		break;
+	case WM_CREATE:
+		NewGame() ;
+		break ;
+	case WM_DESTROY:
+		PostQuitMessage(0);
+		break;
+	default:
+		return DefWindowProc(hWnd, message, wParam, lParam);
+	}
+	return 0;
+}
+
+// Обработчик сообщений для окна "О программе".
+INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
+{
+	UNREFERENCED_PARAMETER(lParam);
+	switch (message)
+	{
+	case WM_INITDIALOG:
+		return (INT_PTR)TRUE;
+
+	case WM_COMMAND:
+		if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL)
+		{
+			EndDialog(hDlg, LOWORD(wParam));
+			return (INT_PTR)TRUE;
+		}
+		break;
+	}
+	return (INT_PTR)FALSE;
+}
+// stdafx.cpp: исходный файл, содержащий только стандартные включаемые модули
+// Shashki.pch будет предкомпилированным заголовком
+// stdafx.obj будет содержать предварительно откомпилированные сведения о типе
+
+#include "stdafx.h"
+
+// TODO: Установите ссылки на любые требующиеся дополнительные заголовки в файле STDAFX.H
+// , а не в данном файле
